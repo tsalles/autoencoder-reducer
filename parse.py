@@ -47,7 +47,7 @@ def parse(trn_fn, tst_fn, val_data=None):
   indices, data, vocab = [], [], dict()
 
   y_trn, indptr, indices, data, vocab = process_file(trn_fn, indptr, indices, data, vocab)
-  y_tst, indptr, indices, data, vocab = process_file(tst_fn, indptr, indices, data, vocab)
+  y_tst, indptr, indices, data, vocab = process_file(tst_fn, indptr, indices, data, vocab) 
 
   labels = set(y_trn)
 
@@ -58,23 +58,24 @@ def parse(trn_fn, tst_fn, val_data=None):
   x =  csr_matrix((data, indices, indptr), dtype=np.float32)
   x.sort_indices()
 
-  x_trn = None
-  if val_fn:
-    x_trn = x[:len(y_trn)]
-    x_val = x[len(y_trn)+len(y_tst):]
-  elif val_split:
-    sz = int(len(y_trn) * (1.0 - val_split))
-    x_trn = x[:sz]
-    x_val = x[sz:len(y_trn)]
-    y_val = y_trn[sz:]
-    y_trn = y_trn[:sz]
-  else:
-    x_trn = x[:len(y_trn)]
+  x_trn = x[:len(y_trn)]
+  x_trn, y_trn = shuffle(x_trn, y_trn)
+
   x_tst = x[len(y_trn):]
 
-  x_trn, y_trn = shuffle(x_trn, y_trn)
-  if x_val is not None:
-    x_val, y_val = shuffle(x_val, y_val)
+  if val_fn:
+    x_val = x_trn[len(y_trn)+len(y_tst):]
+    x_trn = x_trn[:len(y_trn)]
+  elif val_split:
+    sz = int(len(y_trn) * (1.0 - val_split))
+    x_val = x_trn[sz:len(y_trn)]
+    x_trn = x_trn[:sz]
+    y_val = y_trn[sz:]
+    y_trn = y_trn[:sz]
+
+#  x_trn, y_trn = shuffle(x_trn, y_trn)
+#  if x_val is not None:
+#    x_val, y_val = shuffle(x_val, y_val)
 
 #  y_trn = []
 #  with io.open(trn_fn) as fh:
