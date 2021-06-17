@@ -84,10 +84,10 @@ if __name__ == '__main__':
 
   args = parser.parse_args()
 
-  x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
+  labels, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
   validation_data = (x_val, y_val) if  args.val and x_trn.shape[0] > 0 else None
 
-  model, ae_model, compressor = build_model(x_trn.shape[1], len(set(y_trn)), with_ae=args.with_ae, ae_dims=args.ae_dims, bottleneck_dim=args.bottleneck, clf_dims=args.clf_dims)
+  model, ae_model, compressor = build_model(x_trn.shape[1], len(labels), with_ae=args.with_ae, ae_dims=args.ae_dims, bottleneck_dim=args.bottleneck, clf_dims=args.clf_dims)
   model = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
 
   if not args.bottleneck_output:
@@ -102,5 +102,8 @@ if __name__ == '__main__':
         fh.write('{} {} {}:{}\n'.format(i, y_t, np.argmax(y_p), np.max(y_p)))
   elif compressor is not None:
     x_new = compressor.predict(x_trn)
-    print(x_new.shape)
+    with io.open(args.bottleneck_output, 'w') as fh:
+      for i, x in enumerate(x_new):
+        fh.write('{} {}\n'.format(y_trn[i], ' '.join('{}:{}'.format(j, v) for j, v in enumerate(x))))
+        
 

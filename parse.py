@@ -49,6 +49,8 @@ def parse(trn_fn, tst_fn, val_data=None):
   y_trn, indptr, indices, data, vocab = process_file(trn_fn, indptr, indices, data, vocab)
   y_tst, indptr, indices, data, vocab = process_file(tst_fn, indptr, indices, data, vocab)
 
+  labels = set(y_trn)
+
   x_val, y_val = None, None
   if val_fn:
     y_val, indptr, indices, data, vocab = process_file(val_fn, indptr, indices, data, vocab)
@@ -69,6 +71,10 @@ def parse(trn_fn, tst_fn, val_data=None):
   else:
     x_trn = x[:len(y_trn)]
   x_tst = x[len(y_trn):]
+
+  x_trn, y_trn = shuffle(x_trn, y_trn)
+  if x_val is not None:
+    x_val, y_val = shuffle(x_val, y_val)
 
 #  y_trn = []
 #  with io.open(trn_fn) as fh:
@@ -97,7 +103,7 @@ def parse(trn_fn, tst_fn, val_data=None):
 #
 #  y_tst = np.array(y_tst, dtype=np.uint8)
 
-  return x_trn, y_trn, x_tst, y_tst, x_val, y_val
+  return labels, x_trn, y_trn, x_tst, y_tst, x_val, y_val
 
 
 if __name__ == '__main__':
@@ -110,8 +116,9 @@ if __name__ == '__main__':
 
   # X, y = sklearn.utils.shuffle(X, y)
     
-  x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
+  labels, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
 
+  print(len(labels))
   print(x_trn.shape, len(y_trn))
   print(x_tst.shape, len(y_tst))
   if args.val:
