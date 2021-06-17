@@ -84,11 +84,14 @@ if __name__ == '__main__':
 
   args = parser.parse_args()
 
-  labels, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
+  le, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
   validation_data = (x_val, y_val) if  args.val and x_trn.shape[0] > 0 else None
 
-  model, ae_model, compressor = build_model(x_trn.shape[1], len(labels), with_ae=args.with_ae, ae_dims=args.ae_dims, bottleneck_dim=args.bottleneck, clf_dims=args.clf_dims)
+  model, ae_model, compressor = build_model(x_trn.shape[1], len(le.classes_), with_ae=args.with_ae, ae_dims=args.ae_dims, bottleneck_dim=args.bottleneck, clf_dims=args.clf_dims)
   model = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
+
+  if validation_data:
+    model = fit(model, validation_data[0], validation_data[1], clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
 
   if not args.bottleneck_output:
     if args.with_ae:
@@ -97,9 +100,11 @@ if __name__ == '__main__':
       y_prd = model.predict(x_tst)
   
     with io.open(args.output, 'a') as fh:
-      fh.write('#{}\n'.format(args.train.replace('train', '')))
-      for i, (y_t, y_p) in enumerate(zip(y_tst, y_prd)):
-        fh.write('{} {} {}:{}\n'.format(i, y_t, np.argmax(y_p), np.max(y_p)))
+      fh.write('#{}\n'.format(args.test))
+      preds = le.inverse_transform(np.argmax(y_prd, axis=1))
+      scores = np.max(y_prd, axis=1)
+      for i, (y_t, y_p) in enumerate(zip(y_tst, zip(preds, scores))):
+        fh.write('{} {} {}:{}\n'.format(i, y_t, y_p[0], y_p[1]))
   elif compressor is not None:
     x_new = compressor.predict(x_trn)
     with io.open(args.bottleneck_output, 'w') as fh:

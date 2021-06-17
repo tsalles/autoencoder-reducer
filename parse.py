@@ -5,11 +5,12 @@ import scipy
 from scipy.sparse import csr_matrix
 import numpy as np
 from sklearn.utils import shuffle
+from sklearn.preprocessing import LabelEncoder
 
 
 def add_data(r, indptr, indices, data, vocab):
   if len(r) > 1:
-    label = int(r[0])
+    label = r[0]
     for f in r[1:]:
       if f:
         k, v = f.split(':')
@@ -30,7 +31,6 @@ def process_file(fn,  indptr, indices, data, vocab):
       if label is not None:
         y.append(label)
 
-  y = np.array(y, dtype=np.uint8)
   return y, indptr, indices, data, vocab
 
 
@@ -49,62 +49,39 @@ def parse(trn_fn, tst_fn, val_data=None):
   y_trn, indptr, indices, data, vocab = process_file(trn_fn, indptr, indices, data, vocab)
   y_tst, indptr, indices, data, vocab = process_file(tst_fn, indptr, indices, data, vocab) 
 
-  labels = set(y_trn)
+  le = LabelEncoder()
+
+  y_trn = le.fit_transform(y_trn)  
+  y_tst = le.transform(y_tst)
 
   x_val, y_val = None, None
   if val_fn:
     y_val, indptr, indices, data, vocab = process_file(val_fn, indptr, indices, data, vocab)
+    y_val = le.fit_transform(y_val)
 
   x =  csr_matrix((data, indices, indptr), dtype=np.float32)
   x.sort_indices()
 
-  x_trn = x[:len(y_trn) if not val_fn else len(y_trn)+len(y_tst)]
-  x_trn, y_trn = shuffle(x_trn, y_trn)
-
   x_tst = x[len(y_trn):]
 
-  if val_fn:
-    x_val = x_trn[len(y_trn)+len(y_tst):]
-    x_trn = x_trn[:len(y_trn)]
-  elif val_split:
-    sz = int(len(y_trn) * (1.0 - val_split))
-    x_val = x_trn[sz:len(y_trn)]
-    x_trn = x_trn[:sz]
-    y_val = y_trn[sz:]
-    y_trn = y_trn[:sz]
+  x_trn = None
+  if not val_fn and not val_split:
+    x_trn, y_trn = shuffle(x[:len(y_trn)], y_trn)
+  else:
+    if val_fn:
+      x_trn = x[:len(y_trn)+len(y_tst)]
+      x_trn, y_trn = shuffle(x_trn[:len(y_trn)+len(y_tst)], y_trn+y_val)
+      x_val = x_trn[len(y_val):]
+      x_trn = x_trn[:len(y_val)]
+    else:
+      sz = int(len(y_trn) * (1.0 - val_split))
+      x_trn, y_trn = shuffle(x[:len(y_trn)], y_trn)
+      x_val = x_trn[sz:]
+      x_trn = x_trn[:sz]
+      y_val = y_trn[sz:]
+      y_trn = y_trn[:sz]
 
-#  x_trn, y_trn = shuffle(x_trn, y_trn)
-#  if x_val is not None:
-#    x_val, y_val = shuffle(x_val, y_val)
-
-#  y_trn = []
-#  with io.open(trn_fn) as fh:
-#    csvr = csv.reader(fh, delimiter = ' ')
-#    indptr = [0]
-#    indices, data, vocab = [], [], dict()
-#    for r in csvr:
-#      label, indptr, indices, data, vocab = add_data(r, indptr, indices, data, vocab)
-#      if label is not None:
-#        y_trn.append(label)
-#
-#  x_trn = csr_matrix((data, indices, indptr), dtype=np.float32)
-#  x_trn.sort_indices()
-#
-#  y_trn = np.array(y_trn, dtype=np.uint8)
-#
-#  y_tst = []
-#  with io.open(tst_fn) as fh:
-#    csvr = csv.reader(fh, delimiter = ' ')
-#    for r in csvr:
-#      label, indptr, indices, data, vocab = add_data(r, indptr, indices, data, vocab)
-#      if label is not None:
-#        y_tst.append(label)
-#  x_tst = csr_matrix((data, indices, indptr), dtype=np.float32)[len(y_trn):]
-#  x_tst.sort_indices()
-#
-#  y_tst = np.array(y_tst, dtype=np.uint8)
-
-  return labels, x_trn, y_trn, x_tst, y_tst, x_val, y_val
+  return le, x_trn, y_trn, x_tst, y_tst, x_val, y_val
 
 
 if __name__ == '__main__':
@@ -117,9 +94,9 @@ if __name__ == '__main__':
 
   # X, y = sklearn.utils.shuffle(X, y)
     
-  labels, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
+  le, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
 
-  print(len(labels))
+  print(len(le.classes_))
   print(x_trn.shape, len(y_trn))
   print(x_tst.shape, len(y_tst))
   if args.val:
