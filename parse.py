@@ -58,7 +58,7 @@ def parse(trn_fn, tst_fn, val_data=None):
   x =  csr_matrix((data, indices, indptr), dtype=np.float32)
   x.sort_indices()
 
-  x_trn = x[:len(y_trn)]
+  x_trn = x[:len(y_trn) if not val_fn else len(y_trn)+len(y_tst)]
   x_trn, y_trn = shuffle(x_trn, y_trn)
 
   x_tst = x[len(y_trn):]
