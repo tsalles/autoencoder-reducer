@@ -51,13 +51,14 @@ def parse(trn_fn, tst_fn, val_data=None):
 
   le = LabelEncoder()
 
-  y_trn = le.fit_transform(y_trn)  
-  y_tst = le.transform(y_tst)
-
   x_val, y_val = None, None
   if val_fn:
     y_val, indptr, indices, data, vocab = process_file(val_fn, indptr, indices, data, vocab)
-    y_val = le.fit_transform(y_val)
+    le = le.fit(y_trn+y_val)
+    y_trn = le.transform(y_trn)
+    y_val = le.transform(y_val)
+  else:
+    y_trn = le.fit_transform(y_trn)
 
   x =  csr_matrix((data, indices, indptr), dtype=np.float32)
   x.sort_indices()
