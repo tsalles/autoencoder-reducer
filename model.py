@@ -67,7 +67,7 @@ def plot(model, history, history_fn):
 
   keras.utils.plot_model(model, to_file='arch_{}'.format(history_fn), show_shapes=True, show_layer_names=True)
 
-  fig, (ax1. ax2) = plt.subplots(2)
+  fig, (ax1, ax2) = plt.subplots(2)
   fig.suptitle('Training history')
 
   ax1.plot(history.history['accuracy'])
