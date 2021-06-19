@@ -11,6 +11,7 @@ import argparse
 from parse import parse
 import io
 import scipy as sp
+import pickle
 
 
 def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_dim=64, clf_dims=[2048, 1024]):
@@ -39,12 +40,14 @@ def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_di
   ae_model = None
   if with_ae:
     ae_model = keras.Model(input_layer, dec_layer, name='ae_model')
-    ae_model.compile(optimizer='adam', loss='mae')
+    ae_model.compile(optimizer='adam', loss='mae', metrics=['mae', 'mse'])
     compressor = keras.Model(ae_model.input, ae_model.get_layer('bottleneck').output, name='compressor')
 
 
   model = keras.Model(input_layer, [dec_layer, clf_out_layer] if with_ae else clf_out_layer, name='ae_clf_model')
-  model.compile(optimizer='adam', loss=['mae', 'sparse_categorical_crossentropy'], loss_weights=[0.4, 0.6])
+  model.compile(optimizer='adam', loss={'decoder': 'mae', 'classifier': 'sparse_categorical_crossentropy'},
+                metrics={'decoder': ['mae', 'mse'], 'classifier': ['accuracy', 'sparse_top_k_categorical_accuracy']},
+                loss_weights=[0.4, 0.6])
   model.summary()
 
   return model, ae_model, compressor
@@ -67,24 +70,31 @@ def plot(model, history, history_fn):
 
   keras.utils.plot_model(model, to_file='arch_{}'.format(history_fn), show_shapes=True, show_layer_names=True)
 
-  fig, (ax1, ax2) = plt.subplots(2)
+  fig, axs = plt.subplots(2, 2)
   fig.suptitle('Training history')
 
-  ax1.plot(history.history['accuracy'])
-  ax1.plot(history.history['val_accuracy'])
-  ax1.title('Model Accuracy')
-  ax1.ylabel('accuracy')
-  ax1.xlabel('epoch')
-  ax1.legend(['trn', 'val'], loc='upper left')
+  for metric, ax, model in [('accuracy', axs[0, 0], 'classifier'), ('loss', axs[0, 1], 'classifier'),
+                            ('mse', axs[1, 0], 'decoder'), ('loss', axs[1, 1], 'decoder')]:
+    lgd = []
+    if '{}_{}'.format(model, metric) in history.history:
+      ax.plot(history.history['{}_{}'.format(model, metric)])
+      lgd.append('trn')
+    elif metric in history.history:
+      ax.plot(history.history[metric])
+      lgd.append('trn')
+    if 'val_{}_{}'.format(model, metric) in history.history:
+      ax.plot(history.history['val_{}_{}'.format(model, metric)])
+      lgd.append('val')
+    elif 'val_{}'.format(metric) in history.history:
+      ax.plot(history.history['val_{}'.format(metric)])
+      lgd.append('val')
 
-  ax2.plot(history.history['loss'])
-  ax2.plot(history.history['val_loss'])
-  ax2.title('Model Loss')
-  ax2.ylabel('loss')
-  ax2.xlabel('epoch')
-  ax2.legend(['trn', 'tst'], loc='upper left')
+    ax.set_title('Model {}'.format(metric))
+    ax.set_ylabel(metric)
+    ax.set_xlabel('epoch')
+    ax.legend(['trn', 'val'], loc='upper left')
 
-  plt.savefig(history_fn)
+  plt.savefig('{}_convergence.png'.format(history_fn))
 
 
 # TODO: output bootleneck layer representation to a file!!!
@@ -94,7 +104,8 @@ if __name__ == '__main__':
   parser.add_argument('-T', '--test', required=True, help='Test file in libSVM format.')
   parser.add_argument('-v', '--val', required=False, help='Validation file in libSVM format or a validation split on (0,1) open interval.')
   parser.add_argument('-o', '--output', required=True, help='Output file for predictions.')
-  parser.add_argument('-p', '--plot', required=False, help='Output file for history plot with losses per epoch.')
+  parser.add_argument('-s', '--save-model', required=False, help='Prefix file for storing trained model.')
+  parser.add_argument('-p', '--plot', required=False, help='Output file preffix for history plot with losses per epoch.')
   parser.add_argument('-B', '--bottleneck-output', required=False, help='Output file for reduced representation.')
   parser.add_argument('--autoencoder', dest='with_ae', action='store_true', help='Uses AE compression before classification, instead of a vanilla NN.')
   parser.set_defaults(with_ae=False)
@@ -134,12 +145,24 @@ if __name__ == '__main__':
     for i, y_t in enumerate(y_tst):
       fh.write('{} {} {}:{}\n'.format(i, y_t, preds[i], scores[i]))
   if args.bottleneck_output and compressor is not None:
-    x_new = compressor.predict(x_trn if not validation_data else sp.vstack((x_trn, x_val), format='csr'))
-    with io.open(args.bottleneck_output, 'w') as fh:
+    x_new = compressor.predict(x_trn)
+    if validation_data:
+      x_new = np.concatenate((x_new, compressor.predict(x_val)), axis=0)
+    y = y_trn if not validation_data else np.concatenate((y_trn,y_val), axis=0)
+    with io.open('{}_trn'.format(args.bottleneck_output), 'w') as fh:
       for i, x in enumerate(x_new):
-        fh.write('{} {}\n'.format(y_trn[i], ' '.join('{}:{}'.format(j, v) for j, v in enumerate(x))))
-        
+        fh.write('{} {}\n'.format(y[i], ' '.join('{}:{}'.format(j, v) for j, v in enumerate(x))))
+    x_new = compressor.predict(x_tst)
+    with io.open('{}_tst'.format(args.bottleneck_output), 'w') as fh:
+      for i, x in enumerate(x_new):
+        fh.write('{} {}\n'.format(y_tst[i], ' '.join('{}:{}'.format(j, v) for j, v in enumerate(x))))       
+
   if args.plot:
-    fn = args.plot if args.plot.endswith('.png') else args.plot.split('.')[0]+'.png'
     plot(model, h, args.plot)
+
+  if args.save_model:
+     pickle.dump('{}_encoder'.format(args.save_model))
+     model.save('{}_model'.format(args.save_model))
+     if compressor is not None:
+       compressor.save('{}_compressor'.format(args.save_model))
 
