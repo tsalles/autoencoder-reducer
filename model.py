@@ -57,11 +57,11 @@ def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_di
 
 def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, with_ae=False, pretrain_ae=False, batch_size=1):
   if with_ae and pretrain_ae: # pre-training AE
-    callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5, min_delta=0.01)
+    callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss' if validation_data else 'loss', patience=5, min_delta=0.01)
     ae_model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=ae_epochs, callbacks=[callback])
 
   # fine tuning for class separability
-  callback = tf.keras.callbacks.EarlyStopping(monitor='classifier_loss' if args.with_ae else 'loss', patience=5, min_delta=0.01)
+  callback = tf.keras.callbacks.EarlyStopping(monitor='val_classifier_loss' if validation_data and args.with_ae else ('classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)
   h = model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=clf_epochs, callbacks=[callback])
 
   return model, h
@@ -137,7 +137,7 @@ if __name__ == '__main__':
   if args.with_ae:
     if args.pretrain_ae:
       ae_model.trainable = True
-      callback = tf.keras.callbacks.EarlyStopping(monitor='classifier_loss' if args.with_ae else 'loss', patience=5, min_delta=0.01)
+      callback = tf.keras.callbacks.EarlyStopping(monitor='val_classifier_loss' if validation_data and args.with_ae else ('classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)
       model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback])
       model.fit(validation_data[0], validation_data[1], batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback])
     _, y_prd = model.predict(x_tst)
