@@ -55,14 +55,14 @@ def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_di
   return model, ae_model, compressor
 
 
-def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, with_ae=False, pretrain_ae=False):
+def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, with_ae=False, pretrain_ae=False, batch_size=1):
   if with_ae and pretrain_ae: # pre-training AE
     callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5, min_delta=0.01)
-    ae_model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=1, epochs=ae_epochs, callbacks=[callback])
+    ae_model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=ae_epochs, callbacks=[callback])
 
   # fine tuning for class separability
   callback = tf.keras.callbacks.EarlyStopping(monitor='classifier_loss' if args.with_ae else 'loss', patience=5, min_delta=0.01)
-  h = model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=1, epochs=clf_epochs, callbacks=[callback])
+  h = model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=clf_epochs, callbacks=[callback])
 
   return model, h
 
@@ -118,6 +118,7 @@ if __name__ == '__main__':
   parser.add_argument('-c', '--clf-dims', nargs='+', type=int, help='List of dense dimensions for classification.', default=[4096, 2048])
   parser.add_argument('-r', '--cv-round', type=int, help='Iteration number of cross validation.', default=0)
   parser.add_argument('-l', '--loss', choices=['mse', 'mae'], default='mse')
+  parser.add_argument('-S', '--batch-size', type=int, help='Batch size.', default=16)
   parser.set_defaults(with_ae=False)
   parser.set_defaults(pretrain_ae=False)
 
@@ -127,17 +128,18 @@ if __name__ == '__main__':
   validation_data = (x_val, y_val) if  args.val and x_trn.shape[0] > 0 else None
 
   model, ae_model, compressor = build_model(x_trn.shape[1], len(le.classes_), with_ae=args.with_ae, ae_dims=args.ae_dims, bottleneck_dim=args.bottleneck, clf_dims=args.clf_dims, loss=args.loss)
-  model, h = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
+  model, h = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae, batch_size=atgs.batch_size)
 
   if validation_data:
-    model, _ = fit(model, validation_data[0], validation_data[1], clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
+    model, _ = fit(model, validation_data[0], validation_data[1], clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae, batch_size=atgs.batch_size)
 
   
   if args.with_ae:
     if args.pretrain_ae:
       ae_model.trainable = True
       callback = tf.keras.callbacks.EarlyStopping(monitor='classifier_loss' if args.with_ae else 'loss', patience=5, min_delta=0.01)
-      model.fit(x_trn, y_trn, validation_data, batch_size=1, epochs=args.clf_epochs, callbacks=[callback])
+      model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback])
+      model.fit(validation_data[0], validation_data[1], batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback])
     _, y_prd = model.predict(x_tst)
   else:
     y_prd = model.predict(x_tst)
