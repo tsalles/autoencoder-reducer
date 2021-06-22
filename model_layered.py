@@ -23,9 +23,9 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
   assert len(clf_dims), 'At least one CLF dimension must be specified'
 
   out_layers = []
-  bot_layers = []
   input_layer = keras.Input(shape=(dim,))
   if with_ae:
+    bot_layers = []
     for ae_idx, ae_dims in enumerate(all_ae_dims):
       bottleneck_dim = bottleneck_dims[ae_idx]
       for i, d in enumerate(ae_dims):
@@ -68,9 +68,41 @@ def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, 
 
   # fine tuning for class separability
   callback = tf.keras.callbacks.EarlyStopping(monitor='classifier_loss' if args.with_ae else 'loss', patience=5, min_delta=0.01)
-  model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=1, epochs=clf_epochs, callbacks=[callback])
+  h = model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=1, epochs=clf_epochs, callbacks=[callback])
 
-  return model
+  return model, h
+
+
+def plot(model, history, history_fn):
+  import matplotlib.pyplot as plt
+
+  keras.utils.plot_model(model, to_file='arch_{}'.format(history_fn), show_shapes=True, show_layer_names=True)
+
+  fig, axs = plt.subplots(2, 2)
+  fig.suptitle('Training history')
+
+  for metric, ax, model in [('accuracy', axs[0, 0], 'classifier'), ('loss', axs[0, 1], 'classifier'),
+                            ('mse', axs[1, 0], 'decoder'), ('loss', axs[1, 1], 'decoder')]:
+    lgd = []
+    if '{}_{}'.format(model, metric) in history.history:
+      ax.plot(history.history['{}_{}'.format(model, metric)])
+      lgd.append('trn')
+    elif metric in history.history:
+      ax.plot(history.history[metric])
+      lgd.append('trn')
+    if 'val_{}_{}'.format(model, metric) in history.history:
+      ax.plot(history.history['val_{}_{}'.format(model, metric)])
+      lgd.append('val')
+    elif 'val_{}'.format(metric) in history.history:
+      ax.plot(history.history['val_{}'.format(metric)])
+      lgd.append('val')
+
+    ax.set_title('Model {}'.format(metric))
+    ax.set_ylabel(metric)
+    ax.set_xlabel('epoch')
+    ax.legend(['trn', 'val'], loc='upper left')
+
+  plt.savefig('{}_convergence.png'.format(history_fn))
 
 
 if __name__ == '__main__':
@@ -79,6 +111,8 @@ if __name__ == '__main__':
   parser.add_argument('-T', '--test', required=True, help='Test file in libSVM format.')
   parser.add_argument('-v', '--val', required=False, help='Validation file in libSVM format or a validation split on (0,1) open interval.')
   parser.add_argument('-o', '--output', required=True, help='Output file for predictions.')
+  parser.add_argument('-s', '--save-model', required=False, help='Prefix file for storing trained model.')
+  parser.add_argument('-p', '--plot', required=False, help='Output file preffix for history plot with losses per epoch.')
   parser.add_argument('--autoencoder', dest='with_ae', action='store_true', help='Uses AE compression before classification, instead of a vanilla NN.')
   parser.add_argument('-B', '--bottleneck-output', required=False, help='Output file for reduced representation.')
   parser.set_defaults(with_ae=False)
@@ -88,35 +122,56 @@ if __name__ == '__main__':
   parser.add_argument('-a', '--ae-dims', nargs='+', type=int, action='append', help='List of each layered AE dimensions')
   parser.add_argument('-b', '--bottleneck', nargs='+', type=int, help='Dimensions of each bottleneck layer (i.e., the compressed representation)')
   parser.add_argument('-c', '--clf-dims', nargs='+', type=int, help='List of dense dimensions for classification')
+  parser.add_argument('-r', '--cv-round', type=int, help='Iteration number of cross validation.', default=0)
   parser.set_defaults(with_ae=False)
   parser.set_defaults(pretrain_ae=False)
 
   args = parser.parse_args()
 
-  labels, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
+  le, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
   validation_data = (x_val, y_val) if  args.val and x_trn.shape[0] > 0 else None
 
-  model, ae_model, compressor = build_model(x_trn.shape[1], len(labels), with_ae=args.with_ae, all_ae_dims=args.ae_dims, bottleneck_dims=args.bottleneck, clf_dims=args.clf_dims)
-  model = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
+  model, ae_model, compressor = build_model(x_trn.shape[1], len(le.classes_), with_ae=args.with_ae, all_ae_dims=args.ae_dims, bottleneck_dims=args.bottleneck, clf_dims=args.clf_dims)
+  model, h = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
 
-  if not args.bottleneck_output:
-    if args.with_ae:
-      if args.pretrain_ae:
-        ae_model.trainable = True
-        callback = tf.keras.callbacks.EarlyStopping(monitor='classifier_loss' if args.with_ae else 'loss', patience=5, min_delta=0.01)
-        model.fit(x_trn, y_trn, validation_data, batch_size=1, epochs=args.clf_epochs, callbacks=[callback])
-      y_prd = model.predict(x_tst, batch_size=1)[-1]
-    else:
-      y_prd = model.predict(x_tst, batch_size=1)
+  if validation_data:
+    model, _ = fit(model, validation_data[0], validation_data[1], clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
+
+  if args.with_ae:
+    if args.pretrain_ae:
+      ae_model.trainable = True
+      callback = tf.keras.callbacks.EarlyStopping(monitor='classifier_loss' if args.with_ae else 'loss', patience=5, min_delta=0.01)
+      model.fit(x_trn, y_trn, validation_data, batch_size=1, epochs=args.clf_epochs, callbacks=[callback])
+    _, y_prd = model.predict(x_tst, batch_size=1)
+  else:
+    y_prd = model.predict(x_tst, batch_size=1)
   
     with io.open(args.output, 'a') as fh:
-      fh.write('#{}\n'.format(args.train.replace('train', '')))
-      for i, (y_t, y_p) in enumerate(zip(y_tst, y_prd)):
-        fh.write('{} {} {}:{}\n'.format(i, y_t, np.argmax(y_p), np.max(y_p)))
-  elif compressor is not None:
-    # FIXME MOVE SHUFFLINH FROM PARSER TO THIS FILE!!!
-    x_new = compressor.predict(x_trn if not validation_data else sp.vstack((x_trn, x_val), format='csr'))
-    with io.open(args.bottleneck_output, 'w') as fh:
+      preds = le.inverse_transform(np.argmax(y_prd, axis=1))
+      scores = np.max(y_prd, axis=1)
+      fh.write('#{}\n'.format(args.cv_round))
+      for i, y_t in enumerate(y_tst):
+        fh.write('{} {} {}:{}\n'.format(i, y_t, preds[i], scores[i]))
+
+  if args.bottleneck_output and compressor is not None:
+    x_new = compressor.predict(x_trn)
+    if validation_data:
+      x_new = np.concatenate((x_new, compressor.predict(x_val)), axis=0)
+    y = y_trn if not validation_data else np.concatenate((y_trn,y_val), axis=0)
+    with io.open('{}_trn'.format(args.bottleneck_output), 'w') as fh:
       for i, x in enumerate(x_new):
-        fh.write('{} {}\n'.format(y_trn[i], ' '.join('{}:{}'.format(j, v) for j, v in enumerate(x))))
+        fh.write('{} {}\n'.format(y[i], ' '.join('{}:{}'.format(j, v) for j, v in enumerate(x))))
+    x_new = compressor.predict(x_tst)
+    with io.open('{}_tst'.format(args.bottleneck_output), 'w') as fh:
+      for i, x in enumerate(x_new):
+        fh.write('{} {}\n'.format(y_tst[i], ' '.join('{}:{}'.format(j, v) for j, v in enumerate(x))))       
+
+  if args.plot:
+    plot(model, h, args.plot)
+
+  if args.save_model:
+     pickle.dump('{}_encoder'.format(args.save_model))
+     model.save('{}_model'.format(args.save_model))
+     if compressor is not None:
+       compressor.save('{}_compressor'.format(args.save_model))
 
