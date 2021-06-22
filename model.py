@@ -14,7 +14,7 @@ import scipy as sp
 import pickle
 
 
-def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_dim=64, clf_dims=[2048, 1024]):
+def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_dim=64, clf_dims=[2048, 1024], loss='mse'):
   if with_ae:
     assert len(ae_dims), 'At least one AE dimension must be specified when using the AE'
   assert len(clf_dims), 'At least one CLF dimension must be specified'
@@ -42,12 +42,12 @@ def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_di
   ae_model = None
   if with_ae:
     ae_model = keras.Model(input_layer, dec_layer, name='ae_model')
-    ae_model.compile(optimizer='adam', loss='mae', metrics=['mae', 'mse'])
+    ae_model.compile(optimizer='adam', loss=loss, metrics=['mae', 'mse'])
     compressor = keras.Model(ae_model.input, ae_model.get_layer('bottleneck').output, name='compressor')
 
 
   model = keras.Model(input_layer, [dec_layer, clf_out_layer] if with_ae else clf_out_layer, name='ae_clf_model')
-  model.compile(optimizer='adam', loss={'decoder': 'mae', 'classifier': 'sparse_categorical_crossentropy'},
+  model.compile(optimizer='adam', loss={'decoder': loss, 'classifier': 'sparse_categorical_crossentropy'},
                 metrics={'decoder': ['mae', 'mse'], 'classifier': ['accuracy', 'sparse_top_k_categorical_accuracy']},
                 loss_weights=[0.4, 0.6])
   model.summary()
@@ -117,6 +117,7 @@ if __name__ == '__main__':
   parser.add_argument('-b', '--bottleneck', type=int, help='Dimension of bottleneck layer (i.e., the compressed representation).', default=64)
   parser.add_argument('-c', '--clf-dims', nargs='+', type=int, help='List of dense dimensions for classification.', default=[4096, 2048])
   parser.add_argument('-r', '--cv-round', type=int, help='Iteration number of cross validation.', default=0)
+  parser.add_argument('-l', '--loss', choices=['mse', 'mae'], default='mse')
   parser.set_defaults(with_ae=False)
   parser.set_defaults(pretrain_ae=False)
 
@@ -125,7 +126,7 @@ if __name__ == '__main__':
   le, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
   validation_data = (x_val, y_val) if  args.val and x_trn.shape[0] > 0 else None
 
-  model, ae_model, compressor = build_model(x_trn.shape[1], len(le.classes_), with_ae=args.with_ae, ae_dims=args.ae_dims, bottleneck_dim=args.bottleneck, clf_dims=args.clf_dims)
+  model, ae_model, compressor = build_model(x_trn.shape[1], len(le.classes_), with_ae=args.with_ae, ae_dims=args.ae_dims, bottleneck_dim=args.bottleneck, clf_dims=args.clf_dims, loss=args.loss)
   model, h = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
 
   if validation_data:
