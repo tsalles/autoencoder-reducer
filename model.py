@@ -8,7 +8,7 @@ import tensorflow as tf
 from tensorflow import keras
 import numpy as np
 import argparse
-from parse import parse
+from preprocessing.parse import parse
 import io
 import scipy as sp
 import pickle
@@ -19,14 +19,16 @@ def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_di
     assert len(ae_dims), 'At least one AE dimension must be specified when using the AE'
   assert len(clf_dims), 'At least one CLF dimension must be specified'
 
-  ae_model, compressor = None, None
+  ae_model, compressor = None, None 
+
+  out_layers = []
   input_layer = keras.Input(shape=(dim,))
-  
   if with_ae:
     for i, d in enumerate(ae_dims):
       enc_layer = keras.layers.Dense(d, activation='relu')(input_layer if i == 0 else enc_layer)
 #      enc_layer = keras.layers.GaussianNoise(0.2)(enc_layer)
       #enc_layer = keras.layers.Dropout(0.5)(enc_layer)
+
     bot_layer = keras.layers.Dense(bottleneck_dim, activation='relu', name='bottleneck')(enc_layer)
     for i, d in enumerate(reversed(ae_dims)):
       dec_layer = keras.layers.Dense(d, activation='relu')(bot_layer if i == 0 else dec_layer)
@@ -97,7 +99,6 @@ def plot(model, history, history_fn):
   plt.savefig('{}_convergence.png'.format(history_fn))
 
 
-# TODO: output bootleneck layer representation to a file!!!
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Trains and classifies textual data in TFIDF representation using vanilla NN or dimensionaly reduced data from AE.')
   parser.add_argument('-t', '--train', required=True, help='Training file in libSVM format.')
@@ -127,12 +128,15 @@ if __name__ == '__main__':
   model, ae_model, compressor = build_model(x_trn.shape[1], len(le.classes_), with_ae=args.with_ae, ae_dims=args.ae_dims, bottleneck_dim=args.bottleneck, clf_dims=args.clf_dims)
   model, h = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
 
-
   if validation_data:
     model, _ = fit(model, validation_data[0], validation_data[1], clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae)
 
   
   if args.with_ae:
+    if args.pretrain_ae:
+      ae_model.trainable = True
+      callback = tf.keras.callbacks.EarlyStopping(monitor='classifier_loss' if args.with_ae else 'loss', patience=5, min_delta=0.01)
+      model.fit(x_trn, y_trn, validation_data, batch_size=1, epochs=args.clf_epochs, callbacks=[callback])
     _, y_prd = model.predict(x_tst)
   else:
     y_prd = model.predict(x_tst)
@@ -140,10 +144,10 @@ if __name__ == '__main__':
   with io.open(args.output, 'a') as fh:
     preds = le.inverse_transform(np.argmax(y_prd, axis=1))
     scores = np.max(y_prd, axis=1)
-    print([(i, c) for i, c in enumerate(le.classes_)])
     fh.write('#{}\n'.format(args.cv_round))
     for i, y_t in enumerate(y_tst):
       fh.write('{} {} {}:{}\n'.format(i, y_t, preds[i], scores[i]))
+
   if args.bottleneck_output and compressor is not None:
     x_new = compressor.predict(x_trn)
     if validation_data:
