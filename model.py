@@ -62,10 +62,12 @@ def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_di
 
 
 def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, with_ae=False, pretrain_ae=False, batch_size=1):
-  if with_ae and pretrain_ae: # pre-training AE
+  if with_ae: # pre-training AE
     print('FITTING AE')
     callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss' if validation_data else 'loss', patience=5, min_delta=0.01)
     ae_model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=ae_epochs, callbacks=[callback])
+    if pretrain_ae:
+      ae_model.trainable = False
 
   # fine tuning for class separability
   print('FITTING MODEL')
