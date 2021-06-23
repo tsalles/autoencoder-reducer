@@ -12,6 +12,17 @@ from parse import parse
 import io
 import scipy as sp
 
+
+def l1l2(l1_weight=1., l2_weight=1.):
+    l1_weight = l1_weight / (l1_weight+l2_weight)
+    l2_weight = l2_weight / (l1_weight+l2_weight)
+    def loss(y_true,y_pred):
+      mse = keras.losses.mean_squared_error(y_true, y_pred)
+      mae = keras.losses.mean_absolute_error(y_true, y_pred)
+      return l1_weight*mae + l2_weight*mae
+    return loss
+
+
 def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottleneck_dims=[64, 8], clf_dims=[2048, 1024], loss='mse'):
   if with_ae:
     assert len(all_ae_dims) and sum(len(x) for x in all_ae_dims), 'At least one AE dimension must be specified when using the layered AE'
