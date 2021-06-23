@@ -56,18 +56,19 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
   
   clf_out_layer = keras.layers.Dense(num_labels, name='classifier', activation='softmax')(clf_layer)
 
+  model = keras.Model(input_layer, out_layers + [clf_out_layer] if with_ae else clf_out_layer, name='ae_clf_model')
+  model.compile(optimizer='adam', loss=[loss]*len(out_layers) + ['sparse_categorical_crossentropy'] if with_ae else 'sparse_categorical_crossentropy', loss_weights=[0.2]*len(out_layers) + [0.8] if with_ae else None)
+  model.summary()
+  keras.utils.plot_model(model, to_file='plot_layered_model.png', show_shapes=True, show_layer_names=True)
+
   ae_model = None
   if with_ae:
     ae_model = keras.Model(input_layer, out_layers, name='ae_model')
     ae_model.compile(optimizer='adam', loss=[loss]*len(out_layers))
     ae_model.summary()
     keras.utils.plot_model(ae_model, to_file='plot_layered_ae.png', show_shapes=True, show_layer_names=True)
-    compressor = keras.Model(ae_model.input, ae_model.get_layer('concatenate_{}'.format(i+1)).output, name='compressor') 
+    compressor = keras.Model(ae_model.input, model.get_layer('combined_bottleneck').output, name='compressor') 
 
-  model = keras.Model(input_layer, out_layers + [clf_out_layer] if with_ae else clf_out_layer, name='ae_clf_model')
-  model.compile(optimizer='adam', loss=[loss]*len(out_layers) + ['sparse_categorical_crossentropy'] if with_ae else 'sparse_categorical_crossentropy', loss_weights=[0.2]*len(out_layers) + [0.8] if with_ae else None)
-  model.summary()
-  keras.utils.plot_model(model, to_file='plot_layered_model.png', show_shapes=True, show_layer_names=True)
   return model, ae_model, compressor
 
 
