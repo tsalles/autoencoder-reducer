@@ -42,13 +42,13 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
         enc_layer = keras.layers.Dropout(0.2)(enc_layer)
         bot_layer = keras.layers.Dense(bottleneck_dim, activation='relu', name='bottleneck_{}'.format(ae_idx))(enc_layer)
       bot_layers.append(bot_layer)
-      bot_layer = keras.layers.Concatenate()(bot_layers)
+      bot_layer = keras.layers.Concatenate(axis=1)(bot_layers)
       for i, d in enumerate(reversed(ae_dims)):
         dec_layer = keras.layers.Dense(d, activation='relu')(bot_layer if i == 0 else dec_layer)
       dec_layer = keras.layers.Dense(dim, name='decoder_{}'.format(ae_idx))(dec_layer)
       out_layers.append(dec_layer)
       dim = bottleneck_dim
-    bot_layer = keras.layers.Concatenate(name='combined_bottleneck')(bot_layers)
+    bot_layer = keras.layers.Concatenate(name='combined_bottleneck', axis=1)(bot_layers)
 
   for i, d in enumerate(clf_dims if with_ae else clf_dims+ae_dims):
     clf_layer = keras.layers.Dense(d, activation='relu')(clf_layer if i > 0 else (bot_layer if with_ae else input_layer))
@@ -60,7 +60,9 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
   if with_ae:
     ae_model = keras.Model(input_layer, out_layers, name='ae_model')
     ae_model.compile(optimizer='adam', loss=[loss]*len(out_layers))
-    compressor = keras.Model(ae_model.input, ae_model.get_layer('combined_bottleneck').output, name='compressor') 
+    ae_model.summary()
+    keras.utils.plot_model(ae_model, to_file='plot_layered_ae.png', show_shapes=True, show_layer_names=True)
+    compressor = keras.Model(ae_model.input, ae_model.get_layer('concatenate_{}'.format(i+1)).output, name='compressor') 
 
   model = keras.Model(input_layer, out_layers + [clf_out_layer] if with_ae else clf_out_layer, name='ae_clf_model')
   model.compile(optimizer='adam', loss=[loss]*len(out_layers) + ['sparse_categorical_crossentropy'] if with_ae else 'sparse_categorical_crossentropy', loss_weights=[0.2]*len(out_layers) + [0.8] if with_ae else None)
@@ -69,16 +71,16 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
   return model, ae_model, compressor
 
 
-def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, with_ae=False, pretrain_ae=False):
+def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, with_ae=False, pretrain_ae=False, batch_size=16):
   if with_ae: # pre-training AE
     callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss' if validation_data else 'loss', patience=5, min_delta=0.01)
-    ae_model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=1, epochs=ae_epochs, callbacks=[callback])
+    ae_model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=ae_epochs, callbacks=[callback])
     if pretrain_ae:
       ae_model.trainable = False
 
   # fine tuning for class separability
   callback = tf.keras.callbacks.EarlyStopping(monitor='val_classifier_loss' if validation_data and args.with_ae else ('classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)
-  h = model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=1, epochs=clf_epochs, callbacks=[callback])
+  h = model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=clf_epochs, callbacks=[callback])
 
   return model, h
 

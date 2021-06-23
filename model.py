@@ -53,6 +53,8 @@ def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_di
   if with_ae:
     ae_model = keras.Model(input_layer, dec_layer, name='ae_model')
     ae_model.compile(optimizer='adam', loss=loss, metrics=['mae', 'mse'])
+    ae_model.summary()
+    keras.utils.plot_model(ae_model, to_file='plot_layered_ae.png', show_shapes=True, show_layer_names=True)
     compressor = keras.Model(ae_model.input, ae_model.get_layer('bottleneck').output, name='compressor')
 
 
