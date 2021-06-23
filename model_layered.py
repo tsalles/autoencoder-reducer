@@ -8,7 +8,7 @@ import tensorflow as tf
 from tensorflow import keras
 import numpy as np
 import argparse
-from parse import parse
+from preprocessing.parse import parse
 import io
 import scipy as sp
 
