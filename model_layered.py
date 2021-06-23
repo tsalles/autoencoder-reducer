@@ -14,9 +14,6 @@ import scipy as sp
 
 def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottleneck_dims=[64, 8], clf_dims=[2048, 1024], loss='mse'):
   if with_ae:
-    print('all_ae_dims', all_ae_dims)
-    print('bottleneck_dims', bottleneck_dims)
-    print('clf_dims', clf_dims)
     assert len(all_ae_dims) and sum(len(x) for x in all_ae_dims), 'At least one AE dimension must be specified when using the layered AE'
     assert len(bottleneck_dims), 'At least one bottleneck dimension must be specified when using the layered AE'
     assert len(all_ae_dims) == len(bottleneck_dims), 'The number of AE dimension specs must be equal to the number of bottleneck dimensions'
@@ -123,7 +120,7 @@ if __name__ == '__main__':
   parser.add_argument('-b', '--bottleneck', nargs='+', type=int, help='Dimensions of each bottleneck layer (i.e., the compressed representation)')
   parser.add_argument('-c', '--clf-dims', nargs='+', type=int, help='List of dense dimensions for classification')
   parser.add_argument('-r', '--cv-round', type=int, help='Iteration number of cross validation.', default=0)
-  parser.add_argument('-l', '--loss', choices=['mse', 'mae'], default='mse')
+  parser.add_argument('-l', '--loss', choices=['mse', 'mae', 'l1l2'], default='mse')
   parser.add_argument('-S', '--batch-size', type=int, help='Batch size.', default=16)
   parser.set_defaults(with_ae=False)
   parser.set_defaults(pretrain_ae=False)
@@ -133,7 +130,9 @@ if __name__ == '__main__':
   le, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
   validation_data = (x_val, y_val) if  args.val and x_trn.shape[0] > 0 else None
 
-  model, ae_model, compressor = build_model(x_trn.shape[1], len(le.classes_), with_ae=args.with_ae, all_ae_dims=args.ae_dims, bottleneck_dims=args.bottleneck, clf_dims=args.clf_dims, loss=args.loss)
+  loss = l1l2 if args.loss == 'lil2' else args.loss
+
+  model, ae_model, compressor = build_model(x_trn.shape[1], len(le.classes_), with_ae=args.with_ae, all_ae_dims=args.ae_dims, bottleneck_dims=args.bottleneck, clf_dims=args.clf_dims, loss=loss)
   model, h = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae, batch_size=args.batch_size)
 
   if validation_data:
