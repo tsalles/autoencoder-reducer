@@ -165,12 +165,12 @@ if __name__ == '__main__':
   else:
     y_prd = model.predict(x_tst, batch_size=1)
   
-    with io.open(args.output, 'a') as fh:
-      preds = le.inverse_transform(np.argmax(y_prd, axis=1))
-      scores = np.max(y_prd, axis=1)
-      fh.write('#{}\n'.format(args.cv_round))
-      for i, y_t in enumerate(y_tst):
-        fh.write('{} {} {}:{}\n'.format(i, y_t, preds[i], scores[i]))
+  with io.open(args.output, 'a') as fh:
+    preds = le.inverse_transform(np.argmax(y_prd, axis=1))
+    scores = np.max(y_prd, axis=1)
+    fh.write('#{}\n'.format(args.cv_round))
+    for i, y_t in enumerate(y_tst):
+      fh.write('{} {} {}:{}\n'.format(i, y_t, preds[i], scores[i]))
 
   if args.bottleneck_output and compressor is not None:
     x_new = compressor.predict(x_trn)
