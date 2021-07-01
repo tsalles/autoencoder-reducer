@@ -31,6 +31,7 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
   assert len(clf_dims), 'At least one CLF dimension must be specified'
 
   out_layers = []
+  clf_layers = []
   input_layer = keras.Input(shape=(dim,))
   if with_ae:
     bot_layers = []
@@ -39,36 +40,44 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
       for i, d in enumerate(ae_dims):
         enc_layer = keras.layers.Dense(d, activation='relu', name='encoder_{}'.format(ae_idx) if i == 0 else None)(input_layer if ae_idx == 0 and i == 0 else bot_layer if  i == 0 else enc_layer)
 #        enc_layer = keras.layers.GaussianNoise(0.5)(enc_layer)
-        enc_layer = keras.layers.Dropout(0.2)(enc_layer)
+        enc_layer = keras.layers.Dropout(0.3)(enc_layer)
         bot_layer = keras.layers.Dense(bottleneck_dim, activation='relu', name='bottleneck_{}'.format(ae_idx))(enc_layer)
       bot_layers.append(bot_layer)
-      bot_layer = keras.layers.Concatenate(axis=1)(bot_layers)
+      #bot_layer = keras.layers.Concatenate(axis=1)(bot_layers)
       for i, d in enumerate(reversed(ae_dims)):
         dec_layer = keras.layers.Dense(d, activation='relu')(bot_layer if i == 0 else dec_layer)
       dec_layer = keras.layers.Dense(dim, name='decoder_{}'.format(ae_idx))(dec_layer)
       out_layers.append(dec_layer)
       dim = bottleneck_dim
+
+      for i, d in enumerate(clf_dims):
+        clf_layer = keras.layers.Dense(d, activation='relu')(clf_layer if i > 0 else (bot_layer if with_ae else input_layer))
+        clf_layer = keras.layers.Dropout(0.3)(clf_layer)
+      clf_out_layer = keras.layers.Dense(num_labels, name='classifier_{}'.format(ae_idx), activation='softmax')(clf_layer)
+      clf_layers.append(clf_out_layer)
+
     bot_layer = keras.layers.Concatenate(name='combined_bottleneck', axis=1)(bot_layers)
 
-  for i, d in enumerate(clf_dims if with_ae else clf_dims+ae_dims):
-    clf_layer = keras.layers.Dense(d, activation='relu')(clf_layer if i > 0 else (bot_layer if with_ae else input_layer))
-    clf_layer = keras.layers.Dropout(0.2)(clf_layer)
-  
-  clf_out_layer = keras.layers.Dense(num_labels, name='classifier', activation='softmax')(clf_layer)
+    for i, d in enumerate(clf_dims):
+      clf_layer = keras.layers.Dense(d, activation='relu')(clf_layer if i > 0 else (bot_layer if with_ae else input_layer))
+      clf_layer = keras.layers.Dropout(0.3)(clf_layer)
+    clf_out_layer = keras.layers.Dense(num_labels, name='classifier', activation='softmax')(clf_layer)
+    clf_layers.append(clf_out_layer)
 
-  model = keras.Model(input_layer, out_layers + [clf_out_layer] if with_ae else clf_out_layer, name='ae_clf_model')
-  model.compile(optimizer='adam', loss=[loss]*len(out_layers) + ['sparse_categorical_crossentropy'] if with_ae else 'sparse_categorical_crossentropy', loss_weights=[0.2]*len(out_layers) + [0.8] if with_ae else None)
+  model = keras.Model(input_layer, out_layers + clf_layers, name='ae_clf_model')
+  model.compile(optimizer='adam', loss=[loss]*len(out_layers) + ['sparse_categorical_crossentropy']*len(clf_layers) if with_ae else 'sparse_categorical_crossentropy',
+#                metrics=[['mse', 'mae']]*len(out_layers) + ['accuracy', 'sparse_top_k_categorical_accuracy'] if with_ae else ['accuracy', 'sparse_top_k_categorical_accuracy'],
+                loss_weights=[0.2]*len(out_layers) + [0.4]*len(clf_layers[:-1])+[0.8] if with_ae else None)
   model.summary()
   keras.utils.plot_model(model, to_file='plot_layered_model.png', show_shapes=True, show_layer_names=True)
 
   ae_model = None
   if with_ae:
-    ae_model = keras.Model(input_layer, out_layers, name='ae_model')
-    ae_model.compile(optimizer='adam', loss=[loss]*len(out_layers))
+    ae_model = keras.Model(input_layer, out_layers + clf_layers[:-1], name='ae_model')
+    ae_model.compile(optimizer='adam', loss=[loss]*len(out_layers) + ['sparse_categorical_crossentropy']*(len(clf_layers)-1), loss_weights=[0.2]*len(out_layers) + [0.8]*(len(clf_layers)-1))
     ae_model.summary()
     keras.utils.plot_model(ae_model, to_file='plot_layered_ae.png', show_shapes=True, show_layer_names=True)
     compressor = keras.Model(ae_model.input, model.get_layer('combined_bottleneck').output, name='compressor') 
-
   return model, ae_model, compressor
 
 
@@ -160,7 +169,7 @@ if __name__ == '__main__':
       callback = tf.keras.callbacks.EarlyStopping(monitor='val_classifier_loss' if validation_data and args.with_ae else ('classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)
       model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback])
       callback = tf.keras.callbacks.EarlyStopping(monitor='classifier_loss' if args.with_ae else 'loss', patience=5, min_delta=0.01)
-      model.fit(validation_data[0], validation_data[1], batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback])
+      model.fit(validation_data[0], validation_data[1], batch_size=args.batch_size, epochs=10, callbacks=[callback])
     y_prd = model.predict(x_tst, batch_size=1)[-1]
   else:
     y_prd = model.predict(x_tst, batch_size=1)

@@ -3,7 +3,9 @@ Experimental code for dimensionality reduction using autoencoders.
 
 ## Usage
 
-The best way to understand how to usethe provided script is:
+### Single AE
+
+The best way to understand how to use the provided script is:
 ```
 python model.py -h
 ```
@@ -14,7 +16,8 @@ usage: model.py [-h] -t TRAIN -T TEST [-v VAL] -o OUTPUT [-s SAVE_MODEL]
                 [-p PLOT] [-B BOTTLENECK_OUTPUT] [--autoencoder]
                 [--pretrain-ae] [-e CLF_EPOCHS] [-E AE_EPOCHS]
                 [-a AE_DIMS [AE_DIMS ...]] [-b BOTTLENECK]
-                [-c CLF_DIMS [CLF_DIMS ...]] [-r CV_ROUND] [-l {mse,mae}]
+                [-c CLF_DIMS [CLF_DIMS ...]] [-r CV_ROUND] [-l {mse,mae,l1l2}]
+                [-S BATCH_SIZE]
 
 Trains and classifies textual data in TFIDF representation using vanilla NN or
 dimensionaly reduced data from AE.
@@ -50,16 +53,84 @@ optional arguments:
                         List of dense dimensions for classification.
   -r CV_ROUND, --cv-round CV_ROUND
                         Iteration number of cross validation.
-  -l {mse,mae}, --loss {mse,mae}
+  -l {mse,mae,l1l2}, --loss {mse,mae,l1l2}
+  -S BATCH_SIZE, --batch-size BATCH_SIZE
+                        Batch size.
 ```
 
 Example:
 
 ```
 python3 model.py -t train_file -T test_file -a 128 64 -b 32  -c 64 -p hist.png \
-                 --autoencoder --pretrain-ae -E 10 -e 10 -o predictions.txt -r 0\
-                 --loss mae -B reduced_train_file -s model0
+                 --autoencoder --pretrain-ae -E 10 -e 10 -v 0.3 -o predictions.txt \
+                 -r 0 --loss mae -S 64 -B reduced_train_file -s model0
 ```
+
+### Layered AE
+
+The best way to understand how to use the provided script is:
+
+```
+python3 model_layered.py -h
+```
+
+Currently, the supported options are described below:
+```
+usage: model_layered.py [-h] -t TRAIN -T TEST [-v VAL] -o OUTPUT
+                        [-s SAVE_MODEL] [-p PLOT] [--autoencoder]
+                        [-B BOTTLENECK_OUTPUT] [--pretrain-ae] [-e CLF_EPOCHS]
+                        [-E AE_EPOCHS] [-a AE_DIMS [AE_DIMS ...]]
+                        [-b BOTTLENECK [BOTTLENECK ...]]
+                        [-c CLF_DIMS [CLF_DIMS ...]] [-r CV_ROUND]
+                        [-l {mse,mae,l1l2}] [-S BATCH_SIZE]
+
+Trains and classifies textual data in TFIDF representation using vanilla NN or
+dimensionaly reduced data from AE.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -t TRAIN, --train TRAIN
+                        Training file in libSVM format.
+  -T TEST, --test TEST  Test file in libSVM format.
+  -v VAL, --val VAL     Validation file in libSVM format or a validation split
+                        on (0,1) open interval.
+  -o OUTPUT, --output OUTPUT
+                        Output file for predictions.
+  -s SAVE_MODEL, --save-model SAVE_MODEL
+                        Prefix file for storing trained model.
+  -p PLOT, --plot PLOT  Output file preffix for history plot with losses per
+                        epoch.
+  --autoencoder         Uses AE compression before classification, instead of
+                        a vanilla NN.
+  -B BOTTLENECK_OUTPUT, --bottleneck-output BOTTLENECK_OUTPUT
+                        Output file for reduced representation.
+  --pretrain-ae         Pretrains AE then fine tunes the complete model
+  -e CLF_EPOCHS, --clf-epochs CLF_EPOCHS
+                        Number of epochs for classifier training
+  -E AE_EPOCHS, --ae-epochs AE_EPOCHS
+                        Number of epochs for AE training
+  -a AE_DIMS [AE_DIMS ...], --ae-dims AE_DIMS [AE_DIMS ...]
+                        List of each layered AE dimensions
+  -b BOTTLENECK [BOTTLENECK ...], --bottleneck BOTTLENECK [BOTTLENECK ...]
+                        Dimensions of each bottleneck layer (i.e., the
+                        compressed representation)
+  -c CLF_DIMS [CLF_DIMS ...], --clf-dims CLF_DIMS [CLF_DIMS ...]
+                        List of dense dimensions for classification
+  -r CV_ROUND, --cv-round CV_ROUND
+                        Iteration number of cross validation.
+  -l {mse,mae,l1l2}, --loss {mse,mae,l1l2}
+  -S BATCH_SIZE, --batch-size BATCH_SIZE
+                        Batch size.
+```
+
+Example:
+
+```
+python3 model_layered.py -t train_file -T test_file -a 256 128 -a 64 32 -a 16 8 -b 32 16 4 -c 32 \
+                         --autoencoder --pretrain-ae -e 50 -E 50 -v 0.3 -r 0 -o predictions.txt  \
+                         -l mae -S 64 -B reduced_train_file
+```
+
 
 ## Datasets
 
