@@ -37,7 +37,7 @@ def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_di
     for i, d in enumerate(ae_dims):
       enc_layer = keras.layers.Dense(d, activation='relu')(input_layer if i == 0 else enc_layer)
 #      enc_layer = keras.layers.GaussianNoise(0.2)(enc_layer)
-      #enc_layer = keras.layers.Dropout(0.5)(enc_layer)
+      enc_layer = keras.layers.Dropout(0.5)(enc_layer)
 
     bot_layer = keras.layers.Dense(bottleneck_dim, activation='relu', name='bottleneck')(enc_layer)
     for i, d in enumerate(reversed(ae_dims)):
@@ -46,7 +46,7 @@ def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_di
 
   for i, d in enumerate(clf_dims if with_ae else clf_dims+ae_dims):
     clf_layer = keras.layers.Dense(d, activation='relu')(clf_layer if i > 0 else (bot_layer if with_ae else input_layer))
-    #clf_layer = keras.layers.Dropout(0.5)(clf_layer)
+    clf_layer = keras.layers.Dropout(0.5)(clf_layer)
   clf_out_layer = keras.layers.Dense(num_labels, name='classifier', activation='softmax')(clf_layer)
 
   ae_model = None
@@ -59,8 +59,8 @@ def build_model(dim, num_labels, with_ae=True, ae_dims=[256, 128], bottleneck_di
 
 
   model = keras.Model(input_layer, [dec_layer, clf_out_layer] if with_ae else clf_out_layer, name='ae_clf_model')
-  model.compile(optimizer='adam', loss={'decoder': loss, 'classifier': 'sparse_categorical_crossentropy'},
-                metrics={'decoder': ['mae', 'mse'], 'classifier': ['accuracy', 'sparse_top_k_categorical_accuracy']},
+  model.compile(optimizer='adam', loss={'decoder': loss, 'classifier': 'sparse_categorical_crossentropy'} if with_ae else 'sparse_categorical_crossentropy',
+                metrics={'decoder': ['mae', 'mse'], 'classifier': ['accuracy', 'sparse_top_k_categorical_accuracy']} if with_ae else ['accuracy', 'sparse_top_k_categorical_accuracy'],
                 loss_weights=[0.4, 0.6])
   model.summary()
 
@@ -150,7 +150,7 @@ if __name__ == '__main__':
 
   if validation_data:
     print('FITTING VALIDATION DATA')
-    model, _ = fit(model, validation_data[0], validation_data[1], clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae, batch_size=args.batch_size)
+    model, _ = fit(model, validation_data[0], validation_data[1], clf_epochs=10, ae_epochs=10, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae, batch_size=args.batch_size)
 
   
   if args.with_ae:
@@ -163,7 +163,7 @@ if __name__ == '__main__':
       callback = tf.keras.callbacks.EarlyStopping(monitor='val_classifier_loss' if validation_data and args.with_ae else ('classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)
       model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback])
       callback = tf.keras.callbacks.EarlyStopping(monitor='classifier_loss' if args.with_ae else 'loss', patience=5, min_delta=0.01)
-      model.fit(validation_data[0], validation_data[1], batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback])
+      model.fit(validation_data[0], validation_data[1], batch_size=args.batch_size, epochs=10, callbacks=[callback])
     _, y_prd = model.predict(x_tst)
   else:
     y_prd = model.predict(x_tst)
