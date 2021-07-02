@@ -188,11 +188,11 @@ if __name__ == '__main__':
     y = y_trn if not validation_data else np.concatenate((y_trn,y_val), axis=0)
     with io.open('{}_trn'.format(args.bottleneck_output), 'w') as fh:
       for i, x in enumerate(x_new):
-        fh.write('{} {}\n'.format(y[i], ' '.join('{}:{}'.format(j, v) for j, v in enumerate(x))))
+        fh.write('{} {}\n'.format(y[i], ' '.join('{}:{}'.format(j+1, v) for j, v in enumerate(x))))
     x_new = compressor.predict(x_tst)
     with io.open('{}_tst'.format(args.bottleneck_output), 'w') as fh:
       for i, x in enumerate(x_new):
-        fh.write('{} {}\n'.format(y_tst[i], ' '.join('{}:{}'.format(j, v) for j, v in enumerate(x))))       
+        fh.write('{} {}\n'.format(y_tst[i], ' '.join('{}:{}'.format(j+1, v) for j, v in enumerate(x))))       
 
   if args.plot:
     plot(model, h, args.plot)
