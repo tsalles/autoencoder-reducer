@@ -11,6 +11,7 @@ import argparse
 from preprocessing.parse import parse
 import io
 import scipy as sp
+import pickle
 
 
 def l1l2(l1_weight=1., l2_weight=1.):
