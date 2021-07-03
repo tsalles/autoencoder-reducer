@@ -15,7 +15,7 @@ def parse(prd_fn, tst_fn):
   with io.open(prd_fn) as fh:
     for l in fh:
       if l:
-        y_p.append(l.strip())
+        y_p.append(int(l.strip()))
   
   return y, y_p
 

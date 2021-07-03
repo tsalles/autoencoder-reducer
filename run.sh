@@ -13,8 +13,10 @@ rm $dataset/preds_bl.out;
 rm $dataset/preds_ae.out;
 rm $dataset/preds_liblinear_bl.out
 rm $dataset/preds_liblinear_ae.out
+rm $dataset/preds_liblinear_ae_layered.out
 rm $dataset/preds_libsvm_bl.out
 rm $dataset/preds_libsvm_ae.out
+rm $dataset/preds_libsvm_ae_layered.out
 
 for i in `seq 0 $((num_folds-1))`; do
   echo "Round $i"
