@@ -98,7 +98,7 @@ def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, 
 def plot(model, history, history_fn):
   import matplotlib.pyplot as plt
 
-  keras.utils.plot_model(model, to_file='arch_{}'.format(history_fn), show_shapes=True, show_layer_names=True)
+  keras.utils.plot_model(model, to_file='{}_arch.png'.format(history_fn), show_shapes=True, show_layer_names=True)
 
   fig, axs = plt.subplots(2, 2)
   fig.suptitle('Training history')
@@ -198,8 +198,10 @@ if __name__ == '__main__':
     plot(model, h, args.plot)
 
   if args.save_model:
-     pickle.dump('{}_encoder'.format(args.save_model))
+     if args.with_ae:
+       pickle.dump('{}_encoder'.format(args.save_model))
+       if compressor is not None:
+         compressor.save('{}_compressor'.format(args.save_model))
      model.save('{}_model'.format(args.save_model))
-     if compressor is not None:
-       compressor.save('{}_compressor'.format(args.save_model))
+
 
