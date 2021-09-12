@@ -1,0 +1,42 @@
+Text classification is still one of the major information retrieval problems, and developing robust and accurate classification
+models continues to be in great need as a consequence of the increasing complexity and scale of current application scenarios,
+such as the Web. The task of Automatic Text Classification (ATC) aims at creating models that associate documents with semantically
+meaningful categories. One of the key tasks to be performed for effective ATC is to properly represent textual data, being such a task
+the main focus of this project.
+
+Textual data representation is an interesting and challenging task whose main objective is to represent textual documents in a vector space
+better suitable for learning automatic classifiers. Such task, also known as textual feature extraction, supports the ATC task by not only
+improving classification effectiveness but also efficiency, since it allow us to represent data in lower dimensional spaces.
+Common strategies for feature extraction include hand engineering features based on raw textual data as well as learning how
+to represent data for the specific task of automatic classification. Clearly, the process of handcrafting textual features not
+only involves domain specific knowledge but is also a lenghty and probably sub-optimal strategy. Such a challenge calls for
+automatic and more informed solutions, such as using machine learning strategies to this end. The process of representing textual
+data could thus take the advantages of learning algorithms to learn better textual representations from a training set
+that optimizes for class separability in a fully automated fashion.
+
+Roughly speaking, one could represent documents based on distributional representation, which usually involves domain specific
+knowledge where representation is based on word ocurrence patterns and contextual information to come up with vectorial text
+representations, e.g., Latent Semantic Analysis (LSA) and its probabilistic counterpart (pLSA) as well as Latent Semantic Analysis(LSA).
+Furthermore, one could represent textual data using distributed representations whose goal is to encode a document as a compact,
+dense and lower dimensional vector with the semantic meaning of the document distributed along the dimensions of the vector.
+This strategy includes network-based distributed representation models that has shown to outperform distributional strategies
+in terms of classification effectiveness.
+
+We here explore deep learning strategies to come up with better textual data representations for more effective ATC. The key aspect of
+deep learning strategies is that such models are able to learn latent representations that are not designed by human engineers: they
+are learned from data using a general purpose learning procedure. Deep learning requires very little engineering by hand, so it can
+easily take advantage of the increase in the amount of available computation and data.
+
+Currently, strategies based on deep learning for text representation includes autoencoders, restricted Boltzmann models,
+deep belief networks, convolutional neural networks and recurrent neural networks, to name a few. We here focus on autoencoders, as we
+shall describe later.
+
+
+
+An autoencoder, firstly introduced in Rumelhart et al. [72], is a feedforward network that can learn a compressed, distributed representation of data, usually with the goal of dimensionality reduction or manifold learning. An autoencoder usually has one hidden layer between input and output layer. Hidden layer usually has a more compact representation than input and output layers, i.e., hidden layer has fewer units than input or output layer. Input and output layer usually has the same setting, which allows an autoencoder to be trained unsupervised with same data fed in at the input and to be compared with what is at the output layer. The training process is the same as traditional neural network with backpropagation; the only difference lying in the error is computed by comparing the output to the data itself [2]. Mitchell et al. [73], showed a nice illustration of autoencoder. He built a three-layer structure (eight unit for input and output layer and three unit for the hidden layer in between), then he fed the one-hot vector representation into the input and output layer, the hidden layer turned out to approximating the data with inputs’ binary representation [2].
+
+A stacked autoencoder is the deep counterpart of autoencoder and it can be built simply by stacking up layers. For every layer, its input is the learned representation of former layer and it learns a more compact representation of the existing learned representation. A stacked sparse autoencoder, discussed by Gravelines et al. [74], is stacked autoencoder where sparsity regularizations are introduced into the autoencoder to learn a sparse representation. A stacked denoising autoencoder, introduced by (Vincent et al. [75]) is an autoencoder where the data at input layer is replaced by noised data while the data at output layer stays the same; therefore, the autoencoder can be trained with much more generalization power [1].
+
+In reference [76], for the characteristics of short texts, a feature extraction and clustering algorithm based on deep noise autoencoder is brought forward. This algorithm converts spatial vectors of high-dimensional, sparse short texts into new, lower-dimensional, substantive feature spaces by using deep learning network. According to experimental results, applying extractive text features to short text clustering significantly improves clustering effect and efficiently addresses high-dimensional and sparse short text space vectors. In reference [77], it is put forward by using sparse autoencoder of “deep learning” to automatically extract text features and combining deep belief networks to form SD (standard deviation) algorithm to classify texts. Experiments show that in the situation of fewer training sets, classification performance of SD algorithm is lower than that of traditional SVM (support vector machine), but when processing high-dimensional data, SD algorithm has a higher accuracy rate and recall rate than that compared with SVM. In reference [78], this paper presents the use of unsupervised pre-training using autoencoder with deep ConvNet in order to recognize handwritten Bangla digits. The proposed approach achieves 99.50% accuracy, which is so far the best for recognizing handwritten Bangla digits. In reference [79], human motion data is high-dimensional time-series data, and it usually contains measurement error and noise. In experiments, we compared the using of the row data and three types of feature extraction methods—principal component analysis, a shallow sparse autoencoder, and a deep sparse autoencoder—for pattern recognition [79]. The proposed method, application of a deep sparse autoencoder, thus enabled higher recognition accuracy, better generalization, and more stability than that which could be achieved with the other methods [79].
+
+
