@@ -68,7 +68,7 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
 #  for i, d in enumerate(clf_dims) if clf_dims else []:
 #    clf_layer = keras.layers.Dense(d, activation='relu')(input_layer if not with_ae else (clf_layer if i > 0 else (bot_layer if with_ae else input_layer)))
 ##    clf_layer = keras.layers.Dropout(0.3)(clf_layer)
-  clf_out_layer = keras.layers.Dense(num_labels, name='glb_classifier', activation='softmax')(bot_layer) #(clf_layer if clf_dims else (bot_layer if with_ae else input_layer))
+  clf_out_layer = keras.layers.Dense(num_labels, name='glb_classifier', activation='softmax')(bot_layer if with_ae else input_layer) #(clf_layer if clf_dims else (bot_layer if with_ae else input_layer))
   clf_layers.append(clf_out_layer)
 
   model = keras.Model(input_layer, out_layers + clf_layers if with_ae else clf_layers, name='ae_clf_model')
