@@ -51,21 +51,25 @@ We propose a variation of an autoencoder architecture for better text representa
 is able to extract features on different levels of abstraction, by means of a hierarchical architecture of autoencoders. Unlike previous
 autoencoder architectures (such as regular and stacked autoencoders), our proposed hierarchical autoencoder is able to explicitly
 capture multiple levels of representations that correspond to different levels of abstraction, thus forming a hierarchy of concepts, that are
-optimized for class separability at all levels.
+optimized for class separability at all levels. The key building blocks of our proposed architecture are:
+
+1 - Compressed representation: A set of n autoencoders AE_i, for 0 < i < n, organized in a hierarchical setting such that the
+input of AE_0 is a simple textual representation such as TFIDF vectors or word embeddings, and the inputs for autoencoders AE_j, 1 < j < n,
+are given by the bottleneck layers of previous autoencoders AE_{j-1}.
+
+2 - Local class separability: A set of softmax layers SL_i, for 0 < i < n, for each level of the architecture to optimize each compressed
+representation---given by the bottleneck layer of AE_i---for class separability.
+
+3 - Global class separability: A single softmax layer that has as input the combination of all learned compressed representations (e.g., through
+concatenation or averaging) and optimizes for class separability.
+
+All three building blocks are jointly learned, each with its corresponding loss function, according to the learning objective: the compressed
+representation learning minimizes losses that measure the difference between input and output layers of AE_i (i.e., the reconstruction loss, measured
+by L1 or L2 distances, for example). Also, local and global class separability learning minimizes classification losses, such as cross-entropy or
+zero-one loss.
+
+The proposed architecture can be found in the figure below:
 
 [IMAGE HERE]
-
-Our main hypothesis is that capturing different levels of abstraction when
-representing textual data improves the quality of representation in terms of generalization---thus favoring classification effectiveness---,
-but also favors
-
-
-learn multiple levels of representations that correspond to different levels of abstraction; the levels form a hierarchy of concepts.
-high-level abstractions of the inputs, and bringing better generalization.
-
-
-
-
-In reference [76], for the characteristics of short texts, a feature extraction and clustering algorithm based on deep noise autoencoder is brought forward. This algorithm converts spatial vectors of high-dimensional, sparse short texts into new, lower-dimensional, substantive feature spaces by using deep learning network. According to experimental results, applying extractive text features to short text clustering significantly improves clustering effect and efficiently addresses high-dimensional and sparse short text space vectors. In reference [77], it is put forward by using sparse autoencoder of “deep learning” to automatically extract text features and combining deep belief networks to form SD (standard deviation) algorithm to classify texts. Experiments show that in the situation of fewer training sets, classification performance of SD algorithm is lower than that of traditional SVM (support vector machine), but when processing high-dimensional data, SD algorithm has a higher accuracy rate and recall rate than that compared with SVM. In reference [78], this paper presents the use of unsupervised pre-training using autoencoder with deep ConvNet in order to recognize handwritten Bangla digits. The proposed approach achieves 99.50% accuracy, which is so far the best for recognizing handwritten Bangla digits. In reference [79], human motion data is high-dimensional time-series data, and it usually contains measurement error and noise. In experiments, we compared the using of the row data and three types of feature extraction methods—principal component analysis, a shallow sparse autoencoder, and a deep sparse autoencoder—for pattern recognition [79]. The proposed method, application of a deep sparse autoencoder, thus enabled higher recognition accuracy, better generalization, and more stability than that which could be achieved with the other methods [79].
 
 

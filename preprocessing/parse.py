@@ -1,12 +1,17 @@
+import sys
 import argparse
 import io
 import csv
 import scipy
 from scipy.sparse import csr_matrix
+import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
 from sklearn.preprocessing import LabelEncoder
-
+import pickle
+from transformers import AutoTokenizer
+from preprocessing.datamodule.TecDataModule import TeCDataModule
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 def add_data(r, indptr, indices, data, vocab):
   if len(r) > 1:
@@ -22,7 +27,7 @@ def add_data(r, indptr, indices, data, vocab):
   return False, indptr, indices, data, vocab
 
 
-def process_file(fn,  indptr, indices, data, vocab):
+def process_file(fn,  indptr, indices, data, vocab, fmt, samples=None):
   y = []
   with io.open(fn) as fh:
     csvr = csv.reader(fh, delimiter = ' ')
@@ -34,7 +39,64 @@ def process_file(fn,  indptr, indices, data, vocab):
   return y, indptr, indices, data, vocab
 
 
-def parse(trn_fn, tst_fn, val_data=None):
+class AttrDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+
+def parse(libsvm_data_handler=None, tecbench_data_handler=None):
+  if not libsvm_data_handler and not tecbench_data_handler:
+    raise RuntimeError('Please provide either libSVM or TecBench parameters.')
+  if ((libsvm_data_handler and not (libsvm_data_handler.get('train', None) and libsvm_data_handler.get('test'))) or
+      (tecbench_data_handler and not (tecbench_data_handler.get('path', None) and tecbench_data_handler.get('fold', None) is not None))):
+    raise RuntimeError('LibSVM: train and test files must be specified.' if libsvm_data_handler else 'TeCBench: path and folder must be specified.')
+
+  if libsvm_data_handler:
+    return parse_libsvm(**libsvm_data_handler)
+  else:
+    if tecbench_data_handler and tecbench_data_handler.get('path', None) and tecbench_data_handler['path'][-1] != '/':
+      tecbench_data_handler['path'] = tecbench_data_handler['path'] + '/'
+    return parse_tecbench(**tecbench_data_handler)
+
+
+def parse_tecbench(path, fold):
+  tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+  params = {
+    'dir': path,
+    'max_length': 128,
+    'batch_size': 64,
+    'num_workers': 16
+  }
+  data_gen = TeCDataModule(AttrDict(params), tokenizer, fold=fold)
+  data_gen.prepare_data()
+  data_gen.setup(stage='fit')
+
+  vectorizer = TfidfVectorizer(min_df=5, max_df=.2)
+  le = LabelEncoder()
+
+  xs, ys = zip(*[(' '.join(['t{}'.format(i) for i in x]), y) for b in data_gen.train_dataloader() for x, y in zip(b['text'], b['cls'])])
+  x_trn = csr_matrix(vectorizer.fit_transform(xs))
+  x_trn.sort_indices()
+  y_trn = np.array(le.fit_transform(ys))
+
+
+  xs, ys = zip(*[(' '.join(['t{}'.format(i) for i in x]), y) for b in data_gen.val_dataloader() for x, y in zip(b['text'], b['cls'])])
+  x_val = csr_matrix(vectorizer.transform(xs))
+  x_val.sort_indices()
+  y_val = np.array(le.transform(ys))
+
+  data_gen.setup(stage='test')
+  xs, ys = zip(*[(' '.join(['t{}'.format(i) for i in x]), y) for b in data_gen.test_dataloader() for x, y in zip(b['text'], b['cls'])])
+  x_tst = csr_matrix(vectorizer.transform(xs))
+  x_tst.sort_indices()
+  y_tst = np.array(le.transform(ys))
+
+  return le, x_trn, y_trn, x_tst, y_tst, x_val, y_val
+
+
+
+def parse_libsvm(trn_fn, tst_fn, val_data=None):
   val_fn, val_split = None, None
   if val_data:
     try:
@@ -47,7 +109,7 @@ def parse(trn_fn, tst_fn, val_data=None):
   indices, data, vocab = [], [], dict()
 
   y_trn, indptr, indices, data, vocab = process_file(trn_fn, indptr, indices, data, vocab)
-  y_tst, indptr, indices, data, vocab = process_file(tst_fn, indptr, indices, data, vocab) 
+  y_tst, indptr, indices, data, vocab = process_file(tst_fn, indptr, indices, data, vocab)
 
   le = LabelEncoder()
 
@@ -87,15 +149,22 @@ def parse(trn_fn, tst_fn, val_data=None):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Parses a libSVM-formatted dataset.')
-  parser.add_argument('-t', '--train', required=True, help='Training file in libSVM format.')
-  parser.add_argument('-v', '--val', required=False, help='Validation file in libSVM format or a validation split rate on (0,1) open interval.')
-  parser.add_argument('-T', '--test', required=True, help='Test file in libSVM format.')
+  parser.add_argument('-t', '--train', help='Training file in libSVM format.')
+  parser.add_argument('-v', '--val', help='Validation file in libSVM format or a validation split rate on (0,1) open interval.')
+  parser.add_argument('-T', '--test', help='Test file in libSVM format.')
+  parser.add_argument('-p', '--path', help='Path with TecBench data files.')
+  parser.add_argument('-F', '--fold', help='Fold number for TecBench parser.')
+  parser.add_argument('-f', '--format', choices=['libsvm', 'tecbench'], default='libsvm')
 
   args = parser.parse_args()
 
   # X, y = sklearn.utils.shuffle(X, y)
-    
-  le, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(args.train, args.test, args.val)
+
+  params = {
+    'libsvm_data_handler': {'train': args.train, 'test': args.test, 'val': args.val} if args.format == 'libsvm' else None,
+    'tecbench_data_handler': {'path': args.path, 'fold': args.fold} if args.format == 'tecbench' else None
+  }
+  le, x_trn, y_trn, x_tst, y_tst, x_val, y_val = parse(**params)
 
   print(len(le.classes_))
   print(x_trn.shape, len(y_trn))
