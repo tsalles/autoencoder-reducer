@@ -78,7 +78,7 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
   model = keras.Model(input_layer, out_layers + clf_layers if with_ae else clf_layers, name='ae_clf_model')
   model.compile(optimizer='adam', loss=[loss]*len(out_layers) + ['sparse_categorical_crossentropy']*len(clf_layers) if with_ae else 'sparse_categorical_crossentropy',
 #                metrics=[['mse', 'mae']]*len(out_layers) + ['accuracy', 'sparse_top_k_categorical_accuracy'] if with_ae else ['accuracy', 'sparse_top_k_categorical_accuracy'],
-                loss_weights=[0.2]*len(out_layers) + [0.4]*len(clf_layers[:-1])+[0.8] if with_ae else None)
+                loss_weights=[0.5]*len(out_layers) + [0.5]*len(clf_layers[:-1])+[0.5] if with_ae else None)
   model.summary()
   keras.utils.plot_model(model, to_file='plot_layered_model.png', show_shapes=True, show_layer_names=True)
 
@@ -86,23 +86,27 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
   if with_ae:
     ae_model = keras.Model(input_layer, out_layers + clf_layers[:-1], name='ae_model')
     ae_model.compile(optimizer='adam', loss=[loss]*len(out_layers) + ['sparse_categorical_crossentropy']*(len(clf_layers)-1),
-                     loss_weights=[0.2]*len(out_layers) + [0.8]*(len(clf_layers)-1))
+                     loss_weights=[0.5]*len(out_layers) + [0.5]*(len(clf_layers)-1))
     ae_model.summary()
     keras.utils.plot_model(ae_model, to_file='plot_layered_ae.png', show_shapes=True, show_layer_names=True)
     compressor = keras.Model(ae_model.input, model.get_layer('combined_bottleneck').output, name='compressor')
   return model, ae_model, compressor
 
 
-def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, with_ae=False, pretrain_ae=False, batch_size=16):
+def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, with_ae=False, pretrain_ae=False, batch_size=16, use_tb_callback=False):
   if with_ae: # pre-training AE
-    callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss' if validation_data else 'loss', patience=5, min_delta=0.01)
-    ae_model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=ae_epochs, callbacks=[callback])
+    callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss' if validation_data else 'loss', patience=5, min_delta=0.01)]
+    if use_tb_callback:
+      callbacks.append(tf.keras.callbacks.TensorBoard(log_dir="./logs-trn"))
+    ae_model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=ae_epochs, callbacks=callbacks)
     if pretrain_ae:
       ae_model.trainable = False
 
   # fine tuning for class separability
-  callback = tf.keras.callbacks.EarlyStopping(monitor='val_glb_classifier_loss' if validation_data and args.with_ae else ('classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)
-  h = model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=clf_epochs, callbacks=[callback])
+  callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_glb_classifier_loss' if validation_data and args.with_ae else ('glb_classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)]
+  if use_tb_callback:
+    callbacks.append(tf.keras.callbacks.TensorBoard(log_dir="./logs-trn-ft"))
+  h = model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=clf_epochs, callbacks=callbacks)
 
   return model, h
 
@@ -178,7 +182,8 @@ if __name__ == '__main__':
   loss = l1l2 if args.loss == 'l1l2' else args.loss
 
   model, ae_model, compressor = build_model(x_trn.shape[1], len(le.classes_), with_ae=args.with_ae, all_ae_dims=args.ae_dims, bottleneck_dims=args.bottleneck, clf_dims=args.clf_dims, loss=loss)
-  model, h = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae, batch_size=args.batch_size)
+  model, h = fit(model, x_trn, y_trn, validation_data=validation_data, clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae,
+                 pretrain_ae=args.pretrain_ae, batch_size=args.batch_size, use_tb_callback=True)
 
   if validation_data:
     model, _ = fit(model, validation_data[0], validation_data[1], clf_epochs=args.clf_epochs, ae_epochs=args.ae_epochs, with_ae=args.with_ae, pretrain_ae=args.pretrain_ae, batch_size=args.batch_size)
@@ -187,9 +192,11 @@ if __name__ == '__main__':
     if args.pretrain_ae:
       ae_model.trainable = True
       callback = tf.keras.callbacks.EarlyStopping(monitor='val_glb_classifier_loss' if validation_data and args.with_ae else ('glb_classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)
-      model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback])
+      tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir="./logs-model-ft-trn")
+      model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback, tensorboard_callback])
       callback = tf.keras.callbacks.EarlyStopping(monitor='val_glb_classifier_loss' if validation_data and args.with_ae else ('glb_classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)
-      model.fit(validation_data[0], validation_data[1], batch_size=args.batch_size, epochs=10, callbacks=[callback])
+      tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir="./logs-model-ft-val")
+      model.fit(validation_data[0], validation_data[1], batch_size=args.batch_size, epochs=10, callbacks=[callback, tensorboard_callback])
     y_prd = model.predict(x_tst, batch_size=1)[-1]
   else:
     y_prd = model.predict(x_tst, batch_size=1)
