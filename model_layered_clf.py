@@ -4,6 +4,7 @@
 #from tensorflow import set_random_seed
 #set_random_seed(fixed_seed)
 
+import sys
 import tensorflow as tf
 from tensorflow import keras
 import numpy as np
@@ -30,7 +31,7 @@ def l1l2(l1_weight=1., l2_weight=1.):
 
 def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottleneck_dims=[64, 8], clf_dims=[2048, 1024], loss='mse'):
   if with_ae:
-    assert len(all_ae_dims) and sum(len(x) for x in all_ae_dims), 'At least one AE dimension must be specified when using the layered AE'
+    #assert len(all_ae_dims) and sum(len(x) for x in all_ae_dims), 'At least one AE dimension must be specified when using the layered AE'
     assert len(bottleneck_dims), 'At least one bottleneck dimension must be specified when using the layered AE'
     assert len(all_ae_dims) == len(bottleneck_dims), 'The number of AE dimension specs must be equal to the number of bottleneck dimensions'
   assert with_ae or len(clf_dims), 'At least one CLF dimension must be specified when not using AE architecture'
@@ -39,20 +40,23 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
   clf_layers = []
   input_layer = keras.Input(shape=(dim,))
   if with_ae:
+    enc_layer, bot_layer, dec_layer = None, None, None
     bot_layers = []
     for ae_idx, ae_dims in enumerate(all_ae_dims):
-      assert len(ae_dims), 'Dimensions for AE {} must be specified'.format(ae_idx)
+      #assert len(ae_dims), 'Dimensions for AE {} must be specified'.format(ae_idx)
       bottleneck_dim = bottleneck_dims[ae_idx]
       for i, d in enumerate(ae_dims):
         prev_layer = input_layer if ae_idx == 0 and i == 0 else bot_layer if  i == 0 else enc_layer
         enc_layer = keras.layers.Dense(d, activation='relu', name='encoder_{}'.format(ae_idx) if i == 0 else None)(prev_layer)
 #        enc_layer = keras.layers.GaussianNoise(0.5)(enc_layer)
 #        enc_layer = keras.layers.Dropout(0.3)(enc_layer)
+      if not ae_dims:
+        enc_layer = bot_layers[-1] if bot_layers else input_layer
       bot_layer = keras.layers.Dense(bottleneck_dim, activation='relu', name='bottleneck_{}'.format(ae_idx))(enc_layer)
       bot_layers.append(bot_layer)
       for i, d in enumerate(reversed(ae_dims)):
         dec_layer = keras.layers.Dense(d, activation='relu')(bot_layer if i == 0 else dec_layer)
-      dec_layer = keras.layers.Dense(dim, name='decoder_{}'.format(ae_idx))(dec_layer)
+      dec_layer = keras.layers.Dense(dim, name='decoder_{}'.format(ae_idx))(bot_layer if not ae_dims else dec_layer)
 
       out_layers.append(dec_layer)
       dim = bottleneck_dim
@@ -149,7 +153,7 @@ if __name__ == '__main__':
   parser.add_argument('--pretrain-ae', dest='pretrain_ae', action='store_true', help='Pretrains AE then fine tunes the complete model')
   parser.add_argument('-e', '--clf-epochs', type=int, help='Number of epochs for classifier training', default=20)
   parser.add_argument('-E', '--ae-epochs', type=int, help='Number of epochs for AE training', default=20)
-  parser.add_argument('-a', '--ae-dims', nargs='+', type=int, action='append', help='List of each layered AE dimensions')
+  parser.add_argument('-a', '--ae-dims', nargs='*', type=int, action='append', help='List of each layered AE dimensions')
   parser.add_argument('-b', '--bottleneck', nargs='+', type=int, help='Dimensions of each bottleneck layer (i.e., the compressed representation)')
   parser.add_argument('-c', '--clf-dims', nargs='+', type=int, help='List of dense dimensions for classification')
   parser.add_argument('-r', '--cv-round', type=int, help='Iteration number of cross validation.', default=0)
