@@ -49,7 +49,7 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
         prev_layer = input_layer if ae_idx == 0 and i == 0 else bot_layer if  i == 0 else enc_layer
         enc_layer = keras.layers.Dense(d, activation='relu', name='encoder_{}'.format(ae_idx) if i == 0 else None)(prev_layer)
 #        enc_layer = keras.layers.GaussianNoise(0.5)(enc_layer)
-#        enc_layer = keras.layers.Dropout(0.3)(enc_layer)
+        enc_layer = keras.layers.Dropout(0.5)(enc_layer)
       if not ae_dims:
         enc_layer = bot_layers[-1] if bot_layers else input_layer
       bot_layer = keras.layers.Dense(bottleneck_dim, activation='relu', name='bottleneck_{}'.format(ae_idx))(enc_layer)
@@ -65,10 +65,11 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
 #        clf_layer = keras.layers.Dense(d, activation='relu')(dec_layer if i == 0 else clf_layer)
 ##        clf_layer = keras.layers.Dropout(0.3)(clf_layer)
       clf_layer = keras.layers.Dense(num_labels, name='loc_classifier_{}'.format(ae_idx), activation='softmax')(dec_layer) #clf_layer if clf_dims else dec_layer)
+      clf_layer = keras.layers.Dropout(0.5)(clf_layer)
       clf_layers.append(clf_layer)
 
     bot_layer = keras.layers.Concatenate(name='combined_bottleneck', axis=1)(bot_layers)
-
+    bot_layer = keras.layers.Dropout(0.5)(bot_layer)
 #  for i, d in enumerate(clf_dims) if clf_dims else []:
 #    clf_layer = keras.layers.Dense(d, activation='relu')(input_layer if not with_ae else (clf_layer if i > 0 else (bot_layer if with_ae else input_layer)))
 ##    clf_layer = keras.layers.Dropout(0.3)(clf_layer)
@@ -95,7 +96,7 @@ def build_model(dim, num_labels, with_ae=True, all_ae_dims=[[256, 128]], bottlen
 
 def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, with_ae=False, pretrain_ae=False, batch_size=16, use_tb_callback=False):
   if with_ae: # pre-training AE
-    callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss' if validation_data else 'loss', patience=5, min_delta=0.01)]
+    callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss' if validation_data else 'loss', patience=50, min_delta=0.01)]
     if use_tb_callback:
       callbacks.append(tf.keras.callbacks.TensorBoard(log_dir="./logs-trn"))
     ae_model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=ae_epochs, callbacks=callbacks)
@@ -103,7 +104,7 @@ def fit(model, x_trn, y_trn, validation_data=None, clf_epochs=30, ae_epochs=30, 
       ae_model.trainable = False
 
   # fine tuning for class separability
-  callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_glb_classifier_loss' if validation_data and args.with_ae else ('glb_classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)]
+  callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_glb_classifier_loss' if validation_data and args.with_ae else ('glb_classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=50, min_delta=0.01)]
   if use_tb_callback:
     callbacks.append(tf.keras.callbacks.TensorBoard(log_dir="./logs-trn-ft"))
   h = model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=batch_size, epochs=clf_epochs, callbacks=callbacks)
@@ -191,10 +192,10 @@ if __name__ == '__main__':
   if args.with_ae:
     if args.pretrain_ae:
       ae_model.trainable = True
-      callback = tf.keras.callbacks.EarlyStopping(monitor='val_glb_classifier_loss' if validation_data and args.with_ae else ('glb_classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)
+      callback = tf.keras.callbacks.EarlyStopping(monitor='val_glb_classifier_loss' if validation_data and args.with_ae else ('glb_classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=50, min_delta=0.01)
       tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir="./logs-model-ft-trn")
       model.fit(x_trn, y_trn, validation_data=validation_data, batch_size=args.batch_size, epochs=args.clf_epochs, callbacks=[callback, tensorboard_callback])
-      callback = tf.keras.callbacks.EarlyStopping(monitor='val_glb_classifier_loss' if validation_data and args.with_ae else ('glb_classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=5, min_delta=0.01)
+      callback = tf.keras.callbacks.EarlyStopping(monitor='val_glb_classifier_loss' if validation_data and args.with_ae else ('glb_classifier_loss' if args.with_ae else ('val_loss' if validation_data else 'loss')), patience=50, min_delta=0.01)
       tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir="./logs-model-ft-val")
       model.fit(validation_data[0], validation_data[1], batch_size=args.batch_size, epochs=10, callbacks=[callback, tensorboard_callback])
     y_prd = model.predict(x_tst, batch_size=1)[-1]
