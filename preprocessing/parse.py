@@ -8,10 +8,14 @@ import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
 from sklearn.preprocessing import LabelEncoder
+from sklearn.datasets import dump_svmlight_file
 import pickle
 from transformers import AutoTokenizer
-from preprocessing.datamodule.TecDataModule import TeCDataModule
 from sklearn.feature_extraction.text import TfidfVectorizer
+try:
+  from preprocessing.datamodule.TecDataModule import TeCDataModule
+except:
+  from datamodule.TecDataModule import TeCDataModule
 
 def add_data(r, indptr, indices, data, vocab):
   if len(r) > 1:
@@ -147,6 +151,20 @@ def parse_libsvm(trn_fn, tst_fn, val_data=None):
   return le, x_trn, y_trn, x_tst, y_tst, x_val, y_val
 
 
+def write_svm(X, y, prefix, suffix):
+  with io.open('{}_{}.svm'.format(prefix, suffix), 'wb') as fh:
+    dump_svmlight_file(X, y, fh)
+
+
+#  with io.open('{}_{}.svm'.format(prefix, suffix), 'w', encoding='utf8') as fh:
+#    for i, x in enumerate(X):
+#      ln = '{}'.format(y[i])
+#      for f, v in enumerate(x):
+#        ln += ' {}:{}'.format(f, v)
+#      ln += '\n'
+#      fh.write(ln)
+
+
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Parses a libSVM-formatted dataset.')
   parser.add_argument('-t', '--train', help='Training file in libSVM format.')
@@ -155,7 +173,7 @@ if __name__ == '__main__':
   parser.add_argument('-p', '--path', help='Path with TecBench data files.')
   parser.add_argument('-F', '--fold', help='Fold number for TecBench parser.')
   parser.add_argument('-f', '--format', choices=['libsvm', 'tecbench'], default='libsvm')
-
+  parser.add_argument('-o', '--output', help='Outputs the same data in libSVM format with the given prefix.')
   args = parser.parse_args()
 
   # X, y = sklearn.utils.shuffle(X, y)
@@ -171,3 +189,9 @@ if __name__ == '__main__':
   print(x_tst.shape, len(y_tst))
   if args.val:
     print(x_val.shape, len(y_val))
+
+  if args.output:
+    write_svm(x_trn, y_trn, args.output, 'trn')
+    write_svm(x_tst, y_tst, args.output, 'tst')
+    if args.val:
+      write_svm(x_val, y_val, args.output, 'val')

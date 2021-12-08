@@ -5,8 +5,10 @@ import pytorch_lightning as pl
 
 from torch.utils.data import DataLoader
 
-from preprocessing.dataset.TeCDataset import TeCDataset
-
+try:
+  from preprocessing.dataset.TeCDataset import TeCDataset
+except:
+  from dataset.TeCDataset import TeCDataset
 
 class TeCDataModule(pl.LightningDataModule):
     def __init__(self, params, tokenizer, fold):
