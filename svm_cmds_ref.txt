@@ -1,0 +1,1 @@
+python3 /home/tsalles/Programming/svm/libsvm-3.25/tools/easy.py ../datasets/acm/fold_0/libsvm_trn.svm ../datasets/acm/fold_0/libsvm_tst.svm
